@@ -1,73 +1,89 @@
 let originalFileName = '';
-let contacts = [];
-let groups = {};
+let groups = [];
 
-document.getElementById('vcfFile').addEventListener('change', function (e) {
+document.getElementById('vcfFile').addEventListener('change', e => {
   const file = e.target.files[0];
   if (!file) return;
 
   originalFileName = file.name;
-
   const reader = new FileReader();
   reader.onload = () => parseVCF(reader.result);
   reader.readAsText(file);
 });
 
 function parseVCF(text) {
-  contacts = [];
-  groups = {};
+  groups = [];
+  const map = {};
 
-  const blocks = text.split('BEGIN:VCARD');
-  blocks.forEach(b => {
-    if (!b.includes('FN:')) return;
-    const name = b.match(/FN:(.+)/)?.[1].trim();
-    const tel = b.match(/TEL[^:]*:(.+)/)?.[1].trim();
+  text.split('BEGIN:VCARD').forEach(b => {
+    const name = b.match(/FN:(.+)/)?.[1]?.trim();
+    const tel = b.match(/TEL[^:]*:(.+)/)?.[1]?.trim();
     if (!name || !tel) return;
 
     const base = name.replace(/\s\d+$/, '');
-    if (!groups[base]) groups[base] = [];
-    groups[base].push({ name, tel });
-    contacts.push({ name, tel, base });
+    if (!map[base]) map[base] = [];
+    map[base].push({ tel });
   });
 
-  const bases = Object.keys(groups);
-  if (bases.length < 2) {
-    alert('Minimal harus ada 2 grup');
-    return;
-  }
+  const container = document.getElementById('groupsContainer');
+  container.innerHTML = '';
 
-  document.getElementById('group1Name').value = bases[0];
-  document.getElementById('group2Name').value = bases[1];
+  Object.keys(map).forEach(base => {
+    groups.push({
+      originalBase: base,
+      newBase: base,
+      contacts: map[base]
+    });
+
+    container.innerHTML += `
+      <div class="group">
+        <label>Nama Grup</label>
+        <input type="text" value="${base}" data-base="${base}">
+        <textarea placeholder="Tambahan nomor (1 baris 1 nomor)"></textarea>
+      </div>
+    `;
+  });
+
   document.getElementById('panel').classList.remove('hidden');
 }
 
+function normalizeNumber(num) {
+  num = num.replace(/\D/g, '');
+
+  if (num.length < 10) return null;
+
+  if (num.startsWith('0')) num = '62' + num.slice(1);
+  if (!num.startsWith('62')) return null;
+
+  return '+' + num;
+}
+
 function downloadVCF() {
-  const g1 = document.getElementById('group1Name').value.trim();
-  const g2 = document.getElementById('group2Name').value.trim();
-
-  const add1 = getLines('group1Add');
-  const add2 = getLines('group2Add');
-
+  const groupEls = document.querySelectorAll('.group');
   let output = [];
-  let counters = {};
 
-  [...contacts, ...addContacts(g1, add1), ...addContacts(g2, add2)].forEach(c => {
-    counters[c.base] = (counters[c.base] || 0) + 1;
-    output.push(vcard(`${c.base} ${counters[c.base]}`, c.tel));
+  groupEls.forEach((el, index) => {
+    const nameInput = el.querySelector('input').value.trim();
+    const textarea = el.querySelector('textarea').value.split('\n');
+
+    let count = groups[index].contacts.length;
+
+    // kontak asli
+    groups[index].contacts.forEach((c, i) => {
+      output.push(vcard(`${nameInput} ${i + 1}`, c.tel));
+    });
+
+    // tambahan
+    textarea.forEach(line => {
+      const normalized = normalizeNumber(line.trim());
+      if (!normalized) return;
+
+      count++;
+      output.push(vcard(`${nameInput} ${count}`, normalized));
+    });
   });
 
   downloadFile(output.join('\n'), originalFileName);
-}
-
-function addContacts(base, numbers) {
-  return numbers.map(n => ({ base, tel: n }));
-}
-
-function getLines(id) {
-  return document.getElementById(id).value
-    .split('\n')
-    .map(x => x.trim())
-    .filter(Boolean);
 }
 
 function vcard(name, tel) {
