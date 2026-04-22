@@ -5,7 +5,12 @@ document.getElementById('vcfFile').addEventListener('change', e => {
   const file = e.target.files[0];
   if (!file) return;
 
-  originalFileName = file.name;
+  originalFileName = file.name.replace('.vcf', '');
+
+  // tampilkan input nama file
+  document.getElementById('fileNameInput').value = originalFileName;
+  document.getElementById('fileNameBox').classList.remove('hidden');
+
   const reader = new FileReader();
   reader.onload = () => parseVCF(reader.result);
   reader.readAsText(file);
@@ -47,13 +52,22 @@ function parseVCF(text) {
   document.getElementById('panel').classList.remove('hidden');
 }
 
+// SUPPORT SEMUA NEGARA
 function normalizeNumber(num) {
-  num = num.replace(/\D/g, '');
+  num = num.trim();
 
+  if (num.startsWith('+')) {
+    const clean = num.replace(/\D/g, '');
+    if (clean.length < 10) return null;
+    return '+' + clean;
+  }
+
+  num = num.replace(/\D/g, '');
   if (num.length < 10) return null;
 
-  if (num.startsWith('0')) num = '62' + num.slice(1);
-  if (!num.startsWith('62')) return null;
+  if (num.startsWith('0')) {
+    num = '62' + num.slice(1);
+  }
 
   return '+' + num;
 }
@@ -66,11 +80,22 @@ function downloadVCF() {
     const nameInput = el.querySelector('input').value.trim();
     const textarea = el.querySelector('textarea').value.split('\n');
 
-    let count = groups[index].contacts.length;
+    // hitung total valid
+    const tambahanValid = textarea.filter(x => normalizeNumber(x));
+    let total = groups[index].contacts.length + tambahanValid.length;
+
+    // tentukan digit (01 / 001)
+    let digit = 1;
+    if (total >= 10 && total < 100) digit = 2;
+    if (total >= 100) digit = 3;
+
+    let count = 0;
 
     // kontak asli
-    groups[index].contacts.forEach((c, i) => {
-      output.push(vcard(`${nameInput} ${i + 1}`, c.tel));
+    groups[index].contacts.forEach((c) => {
+      count++;
+      let nomor = String(count).padStart(digit, '0');
+      output.push(vcard(`${nameInput} ${nomor}`, c.tel));
     });
 
     // tambahan
@@ -79,11 +104,16 @@ function downloadVCF() {
       if (!normalized) return;
 
       count++;
-      output.push(vcard(`${nameInput} ${count}`, normalized));
+      let nomor = String(count).padStart(digit, '0');
+      output.push(vcard(`${nameInput} ${nomor}`, normalized));
     });
   });
 
-  downloadFile(output.join('\n'), originalFileName);
+  // ambil nama file dari input
+  let fileName = document.getElementById('fileNameInput').value.trim();
+  if (!fileName) fileName = originalFileName;
+
+  downloadFile(output.join('\n'), fileName + '.vcf');
 }
 
 function vcard(name, tel) {
