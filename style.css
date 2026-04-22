@@ -38,3 +38,8 @@ button {
 .hidden {
   display: none;
 }
+
+/* TAMBAHAN */
+#fileNameBox {
+  margin-top: 15px;
+}
